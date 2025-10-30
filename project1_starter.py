@@ -72,7 +72,7 @@ def compute_stats(class_name: str, level: int) -> dict:
 
 # Required Functions
 # Ai assisted with string explanation
-def create_character(name: str, class_name: str, level: int) -> dict:
+def create_character(name: str, class_name: str, level: int = 1) -> dict:
     # Validation first
     if not isinstance(name, str) or not name.strip():
         return {}
@@ -127,72 +127,33 @@ def _to_csv_line(char: dict) -> str:
 
 
 def save_character(path: str, character: dict) -> bool:
-
-    # Validate fields exist
-    if not isinstance(character, dict):
-        return False
+    # Validate required fields
     required = {"name","class","level","gold","strength","magic","health"}
-    if not required.issubset(character.keys()):
+    if not isinstance(character, dict) or not required.issubset(character.keys()):
         return False
-
-    # Permission/directory pre-check
     if not _can_write_file(path):
         return False
 
-    # Write file
+    text = _serialize_exact(character)
     f = open(path, "w", encoding="utf-8")
-    f.write(_SAVE_HEADER + "\n")
-    f.write(_to_csv_line(character) + "\n")
+    f.write(text)
     f.close()
     return True
 
-
 def load_character(path: str):
-
     p = Path(path)
     if not p.is_file() or not _is_readable_file(path):
-        return None  # <- EXACT sentinel for not found
+        return None
 
     f = open(path, "r", encoding="utf-8")
-    lines = [ln.rstrip("\n") for ln in f.readlines()]
+    text = f.read()
     f.close()
 
-    if not lines or lines[0] != _SAVE_HEADER:
+    parsed = _deserialize_exact(text)
+    # If parser reports a format issue, return {}
+    if isinstance(parsed, dict) and "error" in parsed:
         return {}
-    if len(lines) < 2:
-        return {}
-
-    parts = lines[1].split(",")
-    if len(parts) != 7:
-        return {}
-
-    name, cls, level, gold, strength, magic, health = parts
-
-    cn = _normalize_class_name(cls)
-    if not validate_class(cn):
-        return {}
-
-    # Validate ints
-    ints = [level, gold, strength, magic, health]
-    validated = []
-    for s in ints:
-        t = s.strip()
-        if t.startswith("-"):
-            t = t[1:]
-        if not t.isdigit():
-            return {}
-        validated.append(int(s))
-    lvl, g, strn, mag, hp = validated
-
-    return {
-        "name": name.strip(),
-        "class": cn,
-        "level": lvl,
-        "gold": g,
-        "strength": strn,
-        "magic": mag,
-        "health": hp,
-    }
+    return parsed
 
 
 def display_character(character):
@@ -368,9 +329,8 @@ if __name__ == "__main__":
     hero = create_character(name="Aria", class_name="Warrior", level=1)
     print(hero)
 
-    saved = save_character("aria.csv", hero)
+    saved = save_character("aria.txt", hero)
     print("Save result:", saved)
 
-    loaded = load_character("aria.csv")
+    loaded = load_character("aria.txt")
     print(loaded)
-
