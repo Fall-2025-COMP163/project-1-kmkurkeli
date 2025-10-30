@@ -44,7 +44,7 @@ _CLASS_STATS = {
 
 # AI assisted default starting gold
 _DEFAULT_START_GOLD = 50
-
+_SAVE_HEADER = "name,class,level,gold,strength,magic,health"
 
 # Validation helpers
 
@@ -61,87 +61,138 @@ def validate_class(char_class):
     # AI assisted baseline wording
     return char_class in _CLASS_STATS
 
+def is_valid_class(class_name: str) -> bool:
+
+    return validate_class(_normalize_class_name(class_name))
+
+def compute_stats(class_name: str, level: int) -> dict:
+
+    return calculate_stats(class_name, level)
+
 
 # Required Functions
+# Ai assisted with string explanation
+def create_character(name: str, class_name: str, level: int) -> dict:
+    # Validation first
+    if not isinstance(name, str) or not name.strip():
+        return {}
+    cn = _normalize_class_name(class_name)
+    if not validate_class(cn):
+        return {}
+    if not isinstance(level, int) or level < 1:
+        return {}
 
-def create_character(name, character_class):
-    # Create new character dict from name + class at level 1.
-    # Ai assisted Added light normalization so 'warrior' works.
-    char_class = _normalize_class_name(character_class)
-    if not validate_class(char_class):
-        return {"error": f"Invalid class: {character_class}"}
+    stats = calculate_stats(cn, level)
+    if not stats:   # calculate_stats returns {} on invalid
+        return {}
 
-    level = 1
-    stats = calculate_stats(char_class, level)
-    if "error" in stats:
-        return stats
 
-    character = {
+    return {
         "name": name.strip(),
-        "class": char_class,
+        "class": cn,
         "level": level,
+        "gold": _DEFAULT_START_GOLD,
         "strength": stats["strength"],
         "magic": stats["magic"],
         "health": stats["health"],
-        "gold": _DEFAULT_START_GOLD,
-        # Backstory
-        "backstory": generate_backstory(name.strip(), char_class),  # AI assisted one liner
     }
-    return character
 
-
+ # AI assisted with debugging
+ # stat = base + level * growth
 def calculate_stats(character_class, level):
-    # Calculate character stats from class + level using:
-    #     stat = base + level * growth
-    # Enforces level >= 1.
-    # Returns dict: {"strength": int, "magic": int, "health": int}
-    # AI assisted with debugging
-    char_class = _normalize_class_name(character_class)
-    if not validate_class(char_class):
-        return {"error": "Invalid class"}
-    if level < 1:
-        level = 1
+    cn = _normalize_class_name(character_class)
+    if not validate_class(cn) or not isinstance(level, int) or level < 1:
+        return {}  # Empty Dict
 
-    table = _CLASS_STATS[char_class]
+    table = _CLASS_STATS[cn]
     base = table["base"]
     growth = table["growth"]
 
-    strength = base["strength"] + level * growth["strength"]
-    magic    = base["magic"]    + level * growth["magic"]
-    health   = base["health"]   + level * growth["health"]
+    strength = base["strength"] + (level - 1) * growth["strength"]
+    magic    = base["magic"]    + (level - 1) * growth["magic"]
+    health   = base["health"]   + (level - 1) * growth["health"]
 
     return {"strength": int(strength), "magic": int(magic), "health": int(health)}
 
+def _to_csv_line(char: dict) -> str:
+    return ",".join([
+        char.get("name", "").strip(),
+        char.get("class", ""),
+        str(char.get("level", "")),
+        str(char.get("gold", "")),
+        str(char.get("strength", "")),
+        str(char.get("magic", "")),
+        str(char.get("health", "")),
+    ])
 
-def save_character(character, filename):
-    if not _can_write_file(filename):
-        return "Permission denied while saving the character."
-    text = _serialize_exact(character)
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(text)
+
+def save_character(path: str, character: dict) -> bool:
+
+    # Validate fields exist
+    if not isinstance(character, dict):
+        return False
+    required = {"name","class","level","gold","strength","magic","health"}
+    if not required.issubset(character.keys()):
+        return False
+
+    # Permission/directory pre-check
+    if not _can_write_file(path):
+        return False
+
+    # Write file
+    f = open(path, "w", encoding="utf-8")
+    f.write(_SAVE_HEADER + "\n")
+    f.write(_to_csv_line(character) + "\n")
+    f.close()
     return True
 
 
+def load_character(path: str):
 
-def load_character(filename):
-    if not Path(filename).exists():
-        return "File not found."
-    if not _is_readable_file(filename):
-        return "Permission denied while loading the character."
+    p = Path(path)
+    if not p.is_file() or not _is_readable_file(path):
+        return None  # <- EXACT sentinel for not found
 
-    with open(filename, "r", encoding="utf-8") as f:
-        text = f.read()
+    f = open(path, "r", encoding="utf-8")
+    lines = [ln.rstrip("\n") for ln in f.readlines()]
+    f.close()
 
-    parsed = _deserialize_exact(text)
-    if isinstance(parsed, dict) and "error" in parsed:
-        return f"Format error: {parsed['error']}"
-    return parsed
+    if not lines or lines[0] != _SAVE_HEADER:
+        return {}
+    if len(lines) < 2:
+        return {}
 
+    parts = lines[1].split(",")
+    if len(parts) != 7:
+        return {}
 
-    parsed = _deserialize_exact(text)
-    if isinstance(parsed, dict) and "error" in parsed:
-        return {"error": f"Format error: {parsed['error']}"}
-    return parsed
+    name, cls, level, gold, strength, magic, health = parts
+
+    cn = _normalize_class_name(cls)
+    if not validate_class(cn):
+        return {}
+
+    # Validate ints
+    ints = [level, gold, strength, magic, health]
+    validated = []
+    for s in ints:
+        t = s.strip()
+        if t.startswith("-"):
+            t = t[1:]
+        if not t.isdigit():
+            return {}
+        validated.append(int(s))
+    lvl, g, strn, mag, hp = validated
+
+    return {
+        "name": name.strip(),
+        "class": cn,
+        "level": lvl,
+        "gold": g,
+        "strength": strn,
+        "magic": mag,
+        "health": hp,
+    }
 
 
 def display_character(character):
@@ -313,16 +364,13 @@ def generate_backstory(name, char_class):
     return templates.get(char_class, f"{name} wanders with untold stories.")
 
 if __name__ == "__main__":
-    # Simple smoke test so Run shows output
-    hero = create_character(name="Aria", character_class="Warrior")
-    print(display_character(hero))
 
-    saved = save_character(hero, "aria.txt")
+    hero = create_character(name="Aria", class_name="Warrior", level=1)
+    print(hero)
+
+    saved = save_character("aria.csv", hero)
     print("Save result:", saved)
 
-    loaded = load_character("aria.txt")
-    print(display_character(loaded) if isinstance(loaded, dict) else loaded)
-    loaded = load_character("aria.txt")
-    print("Loaded object type:", type(loaded))
-    print(display_character(loaded) if isinstance(loaded, dict) else loaded)
+    loaded = load_character("aria.csv")
+    print(loaded)
 
