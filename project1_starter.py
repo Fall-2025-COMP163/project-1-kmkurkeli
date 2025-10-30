@@ -6,6 +6,19 @@
 #ChatGPT was used to assist with debugging, and AI was used to explain
 #certain strings and blocks of code
 
+import os
+from pathlib import Path
+
+def _is_readable_file(path: str) -> bool:
+    p = Path(path)
+    return p.exists() and p.is_file() and os.access(p, os.R_OK)
+
+def _can_write_file(path: str) -> bool:
+    p = Path(path)
+    parent = p.parent if p.parent.as_posix() != "" else Path(".")
+    if p.exists():
+        return p.is_file() and os.access(p, os.W_OK)
+    return parent.exists() and os.access(parent, os.W_OK)
 
 # Configuration & Data Tables
 
@@ -101,24 +114,29 @@ def calculate_stats(character_class, level):
 
 
 def save_character(character, filename):
-    # Save character to file in the correct format
-    # Returns True on success
-    # AI assisted serialize with strict labels & order for tests.
+    if not _can_write_file(filename):
+        return "Permission denied while saving the character."
     text = _serialize_exact(character)
-    f = open(filename, "w", encoding="utf-8")
-    f.write(text)
-    f.close()
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(text)
     return True
 
 
+
 def load_character(filename):
-    # load character to file in the correct format
-    # Returns a character dict on success; if format is invalid returns {"error": "..."}
-    # missing/locked files will raise exceptions by design
-    # AI assisted Defensive parsing
-    f = open(filename, "r", encoding="utf-8")
-    text = f.read()
-    f.close()
+    if not Path(filename).exists():
+        return "File not found."
+    if not _is_readable_file(filename):
+        return "Permission denied while loading the character."
+
+    with open(filename, "r", encoding="utf-8") as f:
+        text = f.read()
+
+    parsed = _deserialize_exact(text)
+    if isinstance(parsed, dict) and "error" in parsed:
+        return f"Format error: {parsed['error']}"
+    return parsed
+
 
     parsed = _deserialize_exact(text)
     if isinstance(parsed, dict) and "error" in parsed:
@@ -294,12 +312,16 @@ def generate_backstory(name, char_class):
     }
     return templates.get(char_class, f"{name} wanders with untold stories.")
 
-
 if __name__ == "__main__":
-    hero = create_character("Aria", "Warrior")
+    # Simple smoke test so Run shows output
+    hero = create_character(name="Aria", character_class="Warrior")
     print(display_character(hero))
-    ok = save_character(hero, "aria.txt")
-    print("Save result:", ok)
+
+    saved = save_character(hero, "aria.txt")
+    print("Save result:", saved)
+
+    loaded = load_character("aria.txt")
+    print(display_character(loaded) if isinstance(loaded, dict) else loaded)
     loaded = load_character("aria.txt")
     print("Loaded object type:", type(loaded))
     print(display_character(loaded) if isinstance(loaded, dict) else loaded)
