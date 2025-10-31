@@ -7,20 +7,9 @@
 #certain strings and blocks of code
 
 
-# Only proceed if the target is a real file and readable
-def _is_readable_file(path: str) -> bool:
-    p = Path(path)
-    return p.exists() and p.is_file() and os.access(p, os.R_OK)
-
-def _can_write_file(path: str) -> bool:
-    p = Path(path)
-    parent = p.parent if p.parent.as_posix() != "" else Path(".")
-    if p.exists():
-        return p.is_file() and os.access(p, os.W_OK)
-    return parent.exists() and os.access(parent, os.W_OK)
 
 # Configuration & Data Tables
-
+# Consistent base and growth values 
 # Balanced Linear: base + level*growth for each stat
 _CLASS_STATS = {
     "Warrior": {
