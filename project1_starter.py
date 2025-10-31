@@ -6,9 +6,8 @@
 #ChatGPT was used to assist with debugging, and AI was used to explain
 #certain strings and blocks of code
 
-import os
-from pathlib import Path
 
+# Only proceed if the target is a real file and readable
 def _is_readable_file(path: str) -> bool:
     p = Path(path)
     return p.exists() and p.is_file() and os.access(p, os.R_OK)
@@ -131,8 +130,6 @@ def save_character(path: str, character: dict) -> bool:
     required = {"name","class","level","gold","strength","magic","health"}
     if not isinstance(character, dict) or not required.issubset(character.keys()):
         return False
-    if not _can_write_file(path):
-        return False
 
     text = _serialize_exact(character)
     f = open(path, "w", encoding="utf-8")
@@ -141,16 +138,13 @@ def save_character(path: str, character: dict) -> bool:
     return True
 
 def load_character(path: str):
-    p = Path(path)
-    if not p.is_file() or not _is_readable_file(path):
-        return None
-
+    # Directly open and read
     f = open(path, "r", encoding="utf-8")
     text = f.read()
     f.close()
 
     parsed = _deserialize_exact(text)
-    # If parser reports a format issue, return {}
+
     if isinstance(parsed, dict) and "error" in parsed:
         return {}
     return parsed
@@ -334,3 +328,4 @@ if __name__ == "__main__":
 
     loaded = load_character("aria.txt")
     print(loaded)
+
